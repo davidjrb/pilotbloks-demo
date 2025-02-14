@@ -1,0 +1,47 @@
+import time
+import requests
+
+def read_config(filepath):
+    config = {}
+    with open(filepath, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            key, val = line.split('=', 1)
+            config[key.strip()] = val.strip()
+    return config
+
+cfg = read_config("credentials.txt")
+
+INTERNAL_API_HOST = cfg["INTERNAL_API_HOST"]
+USERNAME = cfg["USERNAME"]
+PASSWORD = cfg["PASSWORD"]
+PIN = "dio1"  # or change as needed
+
+def internal_value():
+    url = f"http://{INTERNAL_API_HOST}/cgi-bin/io_value"
+    params = {
+        "username": USERNAME,
+        "password": PASSWORD,
+        "pin": PIN
+    }
+    try:
+        response = requests.get(url, params=params, timeout=3)
+        return response.text.strip()  # "0" or "1"
+    except Exception as e:
+        print("Error fetching status:", e)
+        return "ERR"
+
+def main():
+    last_state = None
+    while True:
+        current_state = internal_value()
+        if current_state != last_state:
+            print(f"State changed: {current_state}")
+            last_state = current_state
+        # Wait 20 seconds between checks
+        time.sleep(20)
+
+if __name__ == "__main__":
+    main()

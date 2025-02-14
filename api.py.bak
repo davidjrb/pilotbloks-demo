@@ -1,0 +1,98 @@
+import time
+import requests
+import os
+from flask import Flask, Response, request
+
+def read_config(filepath):
+    config = {}
+    with open(filepath, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            key, val = line.split('=', 1)
+            config[key.strip()] = val.strip()
+    return config
+
+# Load credentials from a text file
+cfg = read_config("credentials.txt")
+
+INTERNAL_API_HOST = cfg["INTERNAL_API_HOST"]
+USERNAME = cfg["USERNAME"]
+PASSWORD = cfg["PASSWORD"]
+
+last_request_time = 0
+MIN_DELAY_SECONDS = 0.1
+
+app = Flask(__name__)
+
+def internal_on(pin):
+    url = f"http://{INTERNAL_API_HOST}/cgi-bin/io_state"
+    params = {
+        "username": USERNAME,
+        "password": PASSWORD,
+        "pin": pin,
+        "state": "on"
+    }
+    return requests.get(url, params=params).text
+
+def internal_off(pin):
+    url = f"http://{INTERNAL_API_HOST}/cgi-bin/io_state"
+    params = {
+        "username": USERNAME,
+        "password": PASSWORD,
+        "pin": pin,
+        "state": "off"
+    }
+    return requests.get(url, params=params).text
+
+def internal_value(pin):
+    url = f"http://{INTERNAL_API_HOST}/cgi-bin/io_value"
+    params = {
+        "username": USERNAME,
+        "password": PASSWORD,
+        "pin": pin
+    }
+    return requests.get(url, params=params).text
+
+@app.route("/on", methods=["GET"])
+def turn_on():
+    global last_request_time
+    now = time.time()
+    delay_since_last = now - last_request_time
+
+    # Read pin from the query string, default to "dio1" if missing
+    pin = request.args.get("pin", "dio1")
+
+    result = internal_on(pin)
+
+    # Add a small delay after contacting the device
+    if delay_since_last < MIN_DELAY_SECONDS:
+        time.sleep(MIN_DELAY_SECONDS - delay_since_last)
+    last_request_time = time.time()
+
+    return Response(result, mimetype="text/plain")
+
+@app.route("/off", methods=["GET"])
+def turn_off():
+    global last_request_time
+    now = time.time()
+    delay_since_last = now - last_request_time
+
+    pin = request.args.get("pin", "dio1")
+
+    result = internal_off(pin)
+
+    if delay_since_last < MIN_DELAY_SECONDS:
+        time.sleep(MIN_DELAY_SECONDS - delay_since_last)
+    last_request_time = time.time()
+
+    return Response(result, mimetype="text/plain")
+
+@app.route("/status", methods=["GET"])
+def status():
+    pin = request.args.get("pin", "dio1")
+    return Response(internal_value(pin), mimetype="text/plain")
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)

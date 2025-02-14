@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pilotbloks Light Control</title>
+  <style>
+    body {
+      margin: 0; 
+      padding: 0; 
+      font-family: Arial, sans-serif;
+      display: flex; 
+      flex-direction: column;
+      align-items: center; 
+      justify-content: center;
+      height: 100vh; 
+      background: #f9f9f9;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    .button-container {
+      display: flex;
+      gap: 20px;
+    }
+    button {
+      padding: 20px 40px;
+      font-size: 1.2rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button#onBtn {
+      background-color: #4caf50; /* green */
+      color: #fff;
+    }
+    button#offBtn {
+      background-color: #f44336; /* red */
+      color: #fff;
+    }
+    .status {
+      margin-top: 30px;
+      font-size: 1.2rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Pilotbloks Light Control</h1>
+  <div class="button-container">
+    <button id="onBtn">ON</button>
+    <button id="offBtn">OFF</button>
+  </div>
+  <div class="status" id="lightStatus">Status: Unknown</div>
+
+  <script>
+    const lightStatusEl = document.getElementById("lightStatus");
+    // Adjust if your Flask server is on a different IP/port:
+    const BASE_URL = "http://100.97.122.112:5000";
+
+    document.getElementById("onBtn").addEventListener("click", () => {
+      fetch(`${BASE_URL}/on?pin=dio1`)
+        .then(res => res.text())
+        .then(text => {
+          console.log("ON response:", text);
+          // Optionally trigger a status refresh
+          pollStatus();
+        })
+        .catch(console.error);
+    });
+
+    document.getElementById("offBtn").addEventListener("click", () => {
+      fetch(`${BASE_URL}/off?pin=dio1`)
+        .then(res => res.text())
+        .then(text => {
+          console.log("OFF response:", text);
+          // Optionally trigger a status refresh
+          pollStatus();
+        })
+        .catch(console.error);
+    });
+
+    function pollStatus() {
+      fetch(`${BASE_URL}/status?pin=dio1`)
+        .then(res => res.text())
+        .then(text => {
+          console.log("STATUS response:", text);
+          lightStatusEl.textContent = `Status: ${text.trim() === "1" ? "ON" : "OFF"}`;
+        })
+        .catch(err => {
+          console.error("Error fetching status:", err);
+          lightStatusEl.textContent = "Status: Error";
+        });
+    }
+
+    // Refresh status every few seconds
+    setInterval(pollStatus, 5000);
+    pollStatus();
+  </script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+import time
+import requests
+import os
+from flask import Flask, Response, request, send_from_directory
+
+def read_config(filepath):
+    config = {}
+    with open(filepath, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            key, val = line.split('=', 1)
+            config[key.strip()] = val.strip()
+    return config
+
+# Load credentials from a text file
+cfg = read_config("credentials.txt")
+
+INTERNAL_API_HOST = cfg["INTERNAL_API_HOST"]
+USERNAME = cfg["USERNAME"]
+PASSWORD = cfg["PASSWORD"]
+
+# Global toggle cooldown in seconds (adjust as needed)
+COOLDOWN_SECONDS = 2.0
+last_toggle_time = 0
+
+app = Flask(__name__)
+
+def internal_on(pin):
+    url = f"http://{INTERNAL_API_HOST}/cgi-bin/io_state"
+    params = {
+        "username": USERNAME,
+        "password": PASSWORD,
+        "pin": pin,
+        "state": "on"
+    }
+    return requests.get(url, params=params).text
+
+def internal_off(pin):
+    url = f"http://{INTERNAL_API_HOST}/cgi-bin/io_state"
+    params = {
+        "username": USERNAME,
+        "password": PASSWORD,
+        "pin": pin,
+        "state": "off"
+    }
+    return requests.get(url, params=params).text
+
+def internal_value(pin):
+    url = f"http://{INTERNAL_API_HOST}/cgi-bin/io_value"
+    params = {
+        "username": USERNAME,
+        "password": PASSWORD,
+        "pin": pin
+    }
+    return requests.get(url, params=params).text
+
+@app.route("/")
+def serve_index():
+    # Serve index.html from the same folder as api.py
+    return send_from_directory(".", "index.html")
+
+@app.route("/status", methods=["GET"])
+def status():
+    pin = request.args.get("pin", "dio1")
+    # Immediately query the router
+    current_state = internal_value(pin)
+    return Response(current_state, mimetype="text/plain")
+
+@app.route("/on", methods=["GET"])
+def turn_on():
+    global last_toggle_time
+    now = time.time()
+    
+    # If within cooldown window, reject
+    if now - last_toggle_time < COOLDOWN_SECONDS:
+        remaining = int(COOLDOWN_SECONDS - (now - last_toggle_time))
+        return Response(f"Cooldown active. Try again in ~{remaining} second(s).", mimetype="text/plain")
+
+    # Otherwise proceed
+    pin = request.args.get("pin", "dio1")
+    result = internal_on(pin)
+    last_toggle_time = time.time()  # reset cooldown
+    return Response(result, mimetype="text/plain")
+
+@app.route("/off", methods=["GET"])
+def turn_off():
+    global last_toggle_time
+    now = time.time()
+
+    if now - last_toggle_time < COOLDOWN_SECONDS:
+        remaining = int(COOLDOWN_SECONDS - (now - last_toggle_time))
+        return Response(f"Cooldown active. Try again in ~{remaining} second(s).", mimetype="text/plain")
+
+    pin = request.args.get("pin", "dio1")
+    result = internal_off(pin)
+    last_toggle_time = time.time()
+    return Response(result, mimetype="text/plain")
+
+if __name__ == "__main__":
+    # Listen on all interfaces so other machines can reach it
+    app.run(debug=True, host="0.0.0.0", port=5000)
